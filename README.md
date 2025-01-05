@@ -47,6 +47,7 @@ python -m fastchat.serve.controller &
 
 # Start the model worker
 python -m fastchat.serve.model_worker --model-path meta-llama/Llama-2-7b-chat-hf &
+python -m fastchat.serve.model_worker --model-path deepseek-ai/deepseek-math-7b-instruct &
 
 python workflow_gen.py \
     --data_path data/gsm8k/train.jsonl \
