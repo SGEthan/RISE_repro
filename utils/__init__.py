@@ -3,6 +3,11 @@ from .gpt_api import (
     ChatGPT
 )
 
+from .deepseek_api import (
+    CompletionDeepSeek,
+    ChatDeepSeek
+)
+
 from .template import (
     DIALOGUES
 )

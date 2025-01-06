@@ -8,7 +8,7 @@ from typing import Dict, List
 import sys
 from rich import print
 
-from policies import ChatGPTPolicy, FastChatPolicy
+from policies import ChatGPTPolicy, FastChatPolicy, DeepSeekPolicy
 
 from environments.gsm8k import GSM8KEnv
 from environments.math import MATHEnv
@@ -23,6 +23,7 @@ parser.add_argument('--models', nargs='+', type=str, help="models to use for pol
 parser.add_argument('--controller_address', type=str, default="21002", help="model to use for policy")
 parser.add_argument('--num_of_samples', nargs='+', type=int, help='number of actions generated each turn')
 parser.add_argument('--verbose', action='store_true', help="print out logs")
+parser.add_argument('--debug', action='store_true', help="debugging mode with less data")
 parser.add_argument('--model_suffix', type=str, default="", help="specify different model output")
 args = parser.parse_args()
 print(args)
@@ -80,6 +81,9 @@ class ExperimentWrapper():
         if "gpt" in model:
             self.policy = ChatGPTPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
+        if "deepseek" in model:
+            self.policy = DeepSeekPolicy(dialogue_limit=args.dialogue_limit, model=model)
+            self.role = "assistant"
         else:
             self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
             self.role = "agent"
@@ -95,6 +99,8 @@ class ExperimentWrapper():
         self.policy.dialogue.append({"role": "user", "content": observations[-1]})
 
     def run_expr(self):
+        if self.args.debug:
+            self.env.data = self.env.data[:10]
         try:
             for idx in tqdm(range(0,len(self.env.data)), disable=self.args.verbose):
                 observation, reward, valid_action = None, None, None

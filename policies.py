@@ -2,7 +2,7 @@ import re
 
 from typing import Tuple
 
-from utils import CompletionGPT, ChatGPT, DIALOGUES
+from utils import CompletionGPT, ChatGPT, DIALOGUES, ChatDeepSeek, CompletionDeepSeek
 
 import requests
 import os, json, sys, time, re, math, random, datetime, argparse, requests
@@ -186,6 +186,31 @@ class ChatGPTPolicy(BasePolicy):
         actions = []
 
         raw_actions = ChatGPT(self.dialogue, model=self.model, num_samples=num_of_samples)
+        # for action in raw_actions:
+        #     if action not in actions:
+        #         actions.append(action)
+        return raw_actions
+    
+class DeepSeekPolicy(BasePolicy):
+    def __init__(self, dialogue_limit: int = None, model: str = "deepseek-chat", response_limit: int = 1000):
+        super().__init__()
+        self.dialogue_limit = dialogue_limit
+        self.model = model
+        self.response_limit = response_limit
+        print(f"Teacher Model is {self.model}")
+
+    def reset(self, env):
+        self.dialogue = self.init_dialogue("assistant", env)
+
+    def forward(self, num_of_samples) -> Tuple[str, bool]:
+        # Only keep {self.dialogue_limit} most recent messages
+        if self.dialogue_limit and len(self.dialogue) - 2 > self.dialogue_limit:
+            self.dialogue = self.dialogue[:2] + self.dialogue[-self.dialogue_limit:]
+
+        # Retrieve Action from DeepSeek
+        actions = []
+
+        raw_actions = ChatDeepSeek(self.dialogue, model=self.model, num_samples=num_of_samples)
         # for action in raw_actions:
         #     if action not in actions:
         #         actions.append(action)
