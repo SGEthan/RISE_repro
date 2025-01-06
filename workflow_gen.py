@@ -82,7 +82,7 @@ class ExperimentWrapper():
         if "gpt" in model:
             self.policy = ChatGPTPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
-        if "deepseek" in model:
+        if "deepseek-chat" in model:
             self.policy = DeepSeekPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
         else:
