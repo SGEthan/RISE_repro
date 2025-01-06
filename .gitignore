@@ -167,3 +167,5 @@ bash/keys.cfg
 log/*
 dataset/*
 keys.cfg
+keys_deepseek.cfg
+*_test.py
