@@ -101,7 +101,7 @@ class ExperimentWrapper():
 
     def run_expr(self):
         if self.args.debug:
-            self.env.data = self.env.data[:10]
+            self.env.data = self.env.data[:5]
         try:
             for idx in tqdm(range(0,len(self.env.data)), disable=self.args.verbose):
                 observation, reward, valid_action = None, None, None
@@ -113,7 +113,7 @@ class ExperimentWrapper():
                     print(f'------\nQuery {idx}: {query}')    
 
                 for turn in range(self.args.max_turns):
-                    ipdb.set_trace()
+                    # ipdb.set_trace()
                     self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn])
                     actions = []
                     try:

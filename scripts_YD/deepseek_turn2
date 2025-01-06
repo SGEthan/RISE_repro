@@ -6,4 +6,5 @@ python workflow_gen.py \
     --num_of_samples 1 1 \
     --controller_address 21003 \
     --debug \
+    --model_suffix llama_deepseek \
     --models Llama-2-7b-chat-hf deepseek-chat
