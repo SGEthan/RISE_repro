@@ -33,7 +33,7 @@ from fastchat.utils import (
 
 
 worker_id = str(uuid.uuid4())[:8]
-logger = build_logger("model_worker", f"model_worker_{worker_id}.log")
+logger = build_logger("model_worker", f"fastchat_logging/model_worker_{worker_id}.log")
 
 
 class ModelWorker(BaseModelWorker):
@@ -74,6 +74,8 @@ class ModelWorker(BaseModelWorker):
         )
 
         logger.info(f"Loading the model {self.model_names} on worker {worker_id} ...")
+        # print(device)
+        # print(os.environ["CUDA_VISIBLE_DEVICES"])
         self.model, self.tokenizer = load_model(
             model_path,
             device=device,
@@ -307,7 +309,8 @@ def create_model_worker():
                 f"Larger --num-gpus ({args.num_gpus}) than --gpus {args.gpus}!"
             )
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
-
+        if torch.cuda.is_available():
+            print(torch.cuda.device_count())
     gptq_config = GptqConfig(
         ckpt=args.gptq_ckpt or args.model_path,
         wbits=args.gptq_wbits,

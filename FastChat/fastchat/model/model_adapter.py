@@ -179,7 +179,7 @@ def load_model(
     """Load a model from Hugging Face."""
     # get model adapter
     adapter = get_model_adapter(model_path)
-
+    print(adapter, type(adapter))
     # Handle device mapping
     cpu_offloading = raise_warning_for_incompatible_cpu_offloading_configuration(
         device, load_8bit, cpu_offloading
@@ -304,7 +304,7 @@ def load_model(
         model, tokenizer = load_xft_model(model_path, xft_config)
         return model, tokenizer
     kwargs["revision"] = revision
-
+    kwargs["device_map"] = "auto"
     if dtype is not None:  # Overwrite dtype if it is provided in the arguments.
         kwargs["torch_dtype"] = dtype
 
@@ -323,7 +323,9 @@ def load_model(
         "xpu",
         "npu",
     ):
+        # print(model.device)
         model.to(device)
+        # print(model.device)
 
     if device == "xpu":
         model = torch.xpu.optimize(model, dtype=kwargs["torch_dtype"], inplace=True)
@@ -1406,6 +1408,7 @@ class Llama2Adapter(BaseModelAdapter):
 
     def load_model(self, model_path: str, from_pretrained_kwargs: dict):
         model, tokenizer = super().load_model(model_path, from_pretrained_kwargs)
+        # print(os.environ["CUDA_VISIBLE_DEVICES"])
         model.config.eos_token_id = tokenizer.eos_token_id
         model.config.pad_token_id = tokenizer.pad_token_id
         return model, tokenizer

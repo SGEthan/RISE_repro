@@ -23,7 +23,7 @@ parser.add_argument('--models', nargs='+', type=str, help="models to use for pol
 parser.add_argument('--controller_address', type=str, default="21002", help="model to use for policy")
 parser.add_argument('--num_of_samples', nargs='+', type=int, help='number of actions generated each turn')
 parser.add_argument('--verbose', action='store_true', help="print out logs")
-
+parser.add_argument('--model_suffix', type=str, default="", help="specify different model output")
 args = parser.parse_args()
 print(args)
 
@@ -71,7 +71,8 @@ class ExperimentWrapper():
         # Define log file name and path
         if not os.path.exists(args.log_dir):
             os.makedirs(args.log_dir, exist_ok=True)
-        log_file_name = f"{args.max_turns}_turns.json"
+        model_suffix = '_' + args.model_suffix if args.model_suffix else ''
+        log_file_name = f"{args.max_turns}_turns{model_suffix}.json"
         self.log_path = os.path.join(args.log_dir, log_file_name)
         self.log_data = {}
 
