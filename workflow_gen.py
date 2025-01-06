@@ -12,6 +12,7 @@ from policies import ChatGPTPolicy, FastChatPolicy, DeepSeekPolicy
 
 from environments.gsm8k import GSM8KEnv
 from environments.math import MATHEnv
+import ipdb
 
 parser = argparse.ArgumentParser(description='N-turn evaluation for Intercode environment')
 parser.add_argument('--data_path', type=str, default="/Users/yxqu/Desktop/CMU/Research/Self-Imrovement/data/gsm8k/demo.jsonl", help='path to dataset to evaluate on')
@@ -112,6 +113,7 @@ class ExperimentWrapper():
                     print(f'------\nQuery {idx}: {query}')    
 
                 for turn in range(self.args.max_turns):
+                    ipdb.set_trace()
                     self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn])
                     actions = []
                     try:
@@ -154,7 +156,7 @@ class ExperimentWrapper():
                         print(f"-- Best Action: {best_action}")
                         print(f"-- Best Observation: {best_observation}")
                         print(f"-- Best Reward: {best_reward}")
-
+                        
                     if turn_history["best_rewards"][-1] == 1.0:
                         break
 
