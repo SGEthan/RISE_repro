@@ -1,1 +1,1 @@
-nohup python -m fastchat.serve.model_worker --model-path meta-llama/Llama-2-7b-chat-hf --gpus 0,1 --num-gpus 2 --port 21003 & 
+nohup python -m fastchat.serve.model_worker --model-path meta-llama/Llama-2-7b-chat-hf --gpus 0 --num-gpus 1 --port 21003 > model_worker_llama2_log.out & 

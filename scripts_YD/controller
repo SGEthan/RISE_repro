@@ -1,1 +1,1 @@
-nohup python -m fastchat.serve.controller &
+nohup python -m fastchat.serve.controller > controller_log.out &

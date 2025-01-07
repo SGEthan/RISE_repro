@@ -6,13 +6,15 @@ from utils import CompletionGPT, ChatGPT, DIALOGUES, ChatDeepSeek, CompletionDee
 
 import requests
 import os, json, sys, time, re, math, random, datetime, argparse, requests
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 
 # import TimeoutException
 from requests.exceptions import Timeout, ConnectionError
 from fastchat.model.model_adapter import get_conversation_template
 
 import copy
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+import torch
 import ipdb
 
 class Agent:
@@ -68,6 +70,7 @@ class Prompter:
             prompt += role_dict[item['role']].format(content=item['content'])
         prompt += "GPT4 Assistant:"
         return {"prompt": prompt}
+
 
 class FastChatAgent(Agent):
     def __init__(self, model_name, controller_address=None, worker_address=None, temperature=0, max_new_tokens=32, top_p=0, prompter=None, args=None, **kwargs) -> None:
@@ -150,6 +153,113 @@ class FastChatAgent(Agent):
         else:
             raise Exception("Timeout after 3 retries.")
 
+
+class HfChatAgent(Agent):
+    """
+    An Agent that uses a locally loaded Hugging Face model for inference,
+    avoiding FastChat/controller/worker servers.
+    """
+    def __init__(
+        self,
+        model_name: str = "gpt2",
+        temperature: float = 0,
+        max_new_tokens: int = 32,
+        top_p: float = 0,
+        prompter=None,             # Pass a callable that formats prompts, if desired
+        device: Optional[str] = None,  # "cuda" or "cpu"
+        args: Optional[Dict] = None,
+        **kwargs
+    ) -> None:
+        """
+        :param model_name: Hugging Face model name (e.g., "gpt2", "facebook/opt-1.3b", etc.). 
+        :param temperature: Sampling temperature. 
+        :param max_new_tokens: Maximum number of new tokens to generate. 
+        :param top_p: Top-p (nucleus) sampling. 
+        :param prompter: Custom function to build/format the prompt from history. 
+        :param device: "cuda" or "cpu". Defaults to GPU if available. 
+        :param args: Extra generation arguments. 
+        :param kwargs: Passed through to base Agent class if needed. 
+        """
+        super().__init__(**kwargs)
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_new_tokens = max_new_tokens
+        self.top_p = top_p
+        self.prompter = Prompter.get_prompter(prompter)
+        self.args = args or {}
+
+        # Determine default device if not explicitly given
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+        print(f"Loading model {model_name} on device {device}")
+        # ipdb.set_trace()
+
+        # Load tokenizer and model locally
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+        
+        # Create a text-generation pipeline
+        self.generator = pipeline(
+            task="text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            device=0 if device == "cuda" else -1  # pipeline device argument
+        )
+
+    def inference(self, history: List[dict]) -> str:
+        """
+        Generates a response given the conversation history.
+        
+        :param history: List of dicts, each with {"role": "user"|"agent"|"system", "content": "..."}.
+        :return: Generated text from the local model.
+        """
+        # 1. Build or retrieve the prompt.
+        if self.prompter:
+            # If a custom prompter was passed in, use it to create the prompt.
+            prompt = self.prompter(history)
+            # Ensure it's a string or a dict that your pipeline can handle
+        else:
+            # Simple concatenation approach:
+            prompt = ""
+            for turn in history:
+                role = turn["role"]
+                content = turn["content"]
+                if role == "user":
+                    prompt += f"User: {content}\n"
+                elif role == "agent":
+                    prompt += f"Assistant: {content}\n"
+                elif role == "system":
+                    prompt += f"System: {content}\n"
+                else:
+                    prompt += f"{role.capitalize()}: {content}\n"
+            # Typically end with an Assistant prompt:
+            prompt += "Assistant: "
+
+        # 2. Generate text locally with the pipeline.
+        outputs = self.generator(
+            prompt,
+            max_new_tokens=self.max_new_tokens,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            do_sample=(self.temperature > 0),  # do_sample only if temperature > 0
+            **self.args
+        )
+
+        # 3. Extract generated text
+        generated_text = outputs[0]["generated_text"]
+
+        # 4. Optionally, remove the original prompt part from the output (if desired)
+        #    This depends on whether you want the full text or just the newly generated content.
+        if generated_text.startswith(prompt):
+            response = generated_text[len(prompt) :].strip()
+        else:
+            response = generated_text
+
+        return response
+    
+    
+
 class BasePolicy:
     def __init__(self):
         pass
@@ -165,6 +275,34 @@ class BasePolicy:
         else:
             dialogue = []
         return dialogue
+
+
+
+class HfChatPolicy(BasePolicy):
+    def __init__(self, dialogue_limit: int = None, model: str = "", response_limit: int = 1000, device: str = "cpu"):
+        super().__init__()
+        self.dialogue_limit = dialogue_limit
+        self.model = model
+        self.response_limit = response_limit
+        self.agent = HfChatAgent(model_name=model, temperature=1.0, device=device, max_new_tokens=response_limit, top_p=1.0, prompter=None, args=None, name = "HfChatAgent")
+
+    def reset(self, env):
+        self.dialogue = self.init_dialogue("agent", env)
+        
+    def forward(self, num_of_samples) -> Tuple[str, bool]:
+        # Only keep {self.dialogue_limit} most recent messages
+        if self.dialogue_limit and len(self.dialogue) - 2 > self.dialogue_limit:
+            self.dialogue = self.dialogue[:2] + self.dialogue[-self.dialogue_limit:]
+        
+        actions = []
+        for i in range(num_of_samples):
+            raw_actions = self.agent.inference(self.dialogue)
+            action = raw_actions[0] if isinstance(raw_actions, list) else raw_actions
+            # if action not in actions:
+            actions.append(action)
+        return actions
+        
+    
 
 class ChatGPTPolicy(BasePolicy):
     def __init__(self, dialogue_limit: int = None, model: str = "gpt-4-turbo-preview", response_limit: int = 1000):
@@ -190,6 +328,7 @@ class ChatGPTPolicy(BasePolicy):
         #     if action not in actions:
         #         actions.append(action)
         return raw_actions
+    
     
 class DeepSeekPolicy(BasePolicy):
     def __init__(self, dialogue_limit: int = None, model: str = "deepseek-chat", response_limit: int = 1000):

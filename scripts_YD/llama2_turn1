@@ -5,4 +5,5 @@ python workflow_gen.py \
     --max_turns 1 \
     --num_of_samples 1 1 \
     --controller_address 21003 \
-    --models Llama-2-7b-chat-hf gpt-3.5-turbo
+    --model_suffix llama2_turn1_hf \
+    --models meta-llama/Llama-2-7b-chat-hf

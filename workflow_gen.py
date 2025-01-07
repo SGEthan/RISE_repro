@@ -8,7 +8,7 @@ from typing import Dict, List
 import sys
 from rich import print
 
-from policies import ChatGPTPolicy, FastChatPolicy, DeepSeekPolicy
+from policies import ChatGPTPolicy, FastChatPolicy, DeepSeekPolicy, HfChatPolicy
 
 from environments.gsm8k import GSM8KEnv
 from environments.math import MATHEnv
@@ -86,11 +86,16 @@ class ExperimentWrapper():
             self.policy = DeepSeekPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
         else:
-            self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
+            self.policy = HfChatPolicy(dialogue_limit=args.dialogue_limit, model=model, device="cuda")
             self.role = "agent"
+        # else:
+        #     self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
+        #     self.role = "agent"
+        return self.policy, self.role
 
-    def construct_policy_dialogue(self, observations, actions, model):
-        self.init_policy(model)
+    def construct_policy_dialogue(self, observations, actions, model, turn):
+        # self.init_policy(model)
+        self.policy = self.policies[turn]
         self.policy.reset(self.args.env)
         for i in range(len(actions)):
             action = actions[i]
@@ -101,8 +106,16 @@ class ExperimentWrapper():
 
     def run_expr(self):
         if self.args.debug:
-            self.env.data = self.env.data[:5]
+            self.env.data = self.env.data[:10]
         try:
+            self.policies = []
+            self.roles = []
+            for i in range(self.args.max_turns):
+                # initiliaze policies with roles
+                policy, role = self.init_policy(self.args.models[i])
+                self.policies.append(policy)
+                self.roles.append(role)
+                
             for idx in tqdm(range(0,len(self.env.data)), disable=self.args.verbose):
                 observation, reward, valid_action = None, None, None
                 turn_history = {"best_actions": [], "actions": {}, "best_observations": [], "observations": {}, "best_rewards": [], "rewards": {}}
@@ -114,7 +127,7 @@ class ExperimentWrapper():
 
                 for turn in range(self.args.max_turns):
                     # ipdb.set_trace()
-                    self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn])
+                    self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn], turn)
                     actions = []
                     try:
                         while len(actions) == 0:
