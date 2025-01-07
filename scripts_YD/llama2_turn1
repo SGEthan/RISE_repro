@@ -6,4 +6,4 @@ python workflow_gen.py \
     --num_of_samples 1 1 \
     --controller_address 21003 \
     --model_suffix llama2_turn1_hf \
-    --models meta-llama/Llama-2-7b-chat-hf
+    --models meta-llama/Llama-2-7b-chat-hf &

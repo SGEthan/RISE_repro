@@ -26,6 +26,7 @@ parser.add_argument('--num_of_samples', nargs='+', type=int, help='number of act
 parser.add_argument('--verbose', action='store_true', help="print out logs")
 parser.add_argument('--debug', action='store_true', help="debugging mode with less data")
 parser.add_argument('--model_suffix', type=str, default="", help="specify different model output")
+parser.add_argument('--batch_size', type=int, default=1, help="batch size for evaluation")
 args = parser.parse_args()
 print(args)
 
@@ -77,6 +78,9 @@ class ExperimentWrapper():
         log_file_name = f"{args.max_turns}_turns{model_suffix}.json"
         self.log_path = os.path.join(args.log_dir, log_file_name)
         self.log_data = {}
+        if os.path.exists(self.log_path):
+            with open(self.log_path, "r") as fp:
+                self.log_data = json.load(fp)
 
     def init_policy(self, model):
         if "gpt" in model:
@@ -86,7 +90,7 @@ class ExperimentWrapper():
             self.policy = DeepSeekPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
         else:
-            self.policy = HfChatPolicy(dialogue_limit=args.dialogue_limit, model=model, device="cuda")
+            self.policy = HfChatPolicy(dialogue_limit=args.dialogue_limit, model=model, device="cuda", batch_size=args.batch_size)
             self.role = "agent"
         # else:
         #     self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
@@ -117,61 +121,67 @@ class ExperimentWrapper():
                 self.roles.append(role)
                 
             for idx in tqdm(range(0,len(self.env.data)), disable=self.args.verbose):
-                observation, reward, valid_action = None, None, None
-                turn_history = {"best_actions": [], "actions": {}, "best_observations": [], "observations": {}, "best_rewards": [], "rewards": {}}
-                
-                init_observation = self.env.reset(idx)
-                query = self.env.query
-                if self.args.verbose:
-                    print(f'------\nQuery {idx}: {query}')    
-
-                for turn in range(self.args.max_turns):
-                    # ipdb.set_trace()
-                    self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn], turn)
-                    actions = []
-                    try:
-                        while len(actions) == 0:
-                            actions = self.policy.forward(args.num_of_samples[turn])
-                            for action in actions:
-                                if detect_duplicates(action, 150):
-                                    print(f"[WARNING] Index {idx}: Duplicate detected in action: {action}")
-                                    actions.remove(action)
-                                
-                    except (ValueError, TypeError) as e:
-                        print(f"[ERROR] Index {idx}: {e}")
-                        # Logging
-                        turn_history["actions"][turn] = ["blocked"]
-                        turn_history["rewards"][turn] = [None]
-                        break
-
-                    turn_history["actions"][turn] = actions
-                    turn_history["rewards"][turn] = []
-                    turn_history["observations"][turn] = []
-
-                    for action in actions:
-                        reward, error_message, success = self.env.step(action)
-                        observation = self.env.format_output(error_message, success, reward)
-                        turn_history["rewards"][turn].append(reward)
-                        turn_history["observations"][turn].append(observation)
+                for batch_idx in range(self.args.batch_size):
+                    observation, reward, valid_action = None, None, None
+                    turn_history = {"best_actions": [], "actions": {}, "best_observations": [], "observations": {}, "best_rewards": [], "rewards": {}}
                     
-                    max_reward_idx = turn_history["rewards"][turn].index(max(turn_history["rewards"][turn]))
+                    init_observation = self.env.reset(idx + batch_idx)
+                    query = self.env.query
+                    if str(idx + batch_idx) in self.log_data:
+                        if query == self.log_data[str(idx + batch_idx)]["query"]:
+                            print(f"Skipping index {idx + batch_idx} as it has already been processed")
+                            continue
                     
-                    best_action = turn_history["actions"][turn][max_reward_idx]
-                    best_reward = turn_history["rewards"][turn][max_reward_idx]
-                    best_observation = turn_history["observations"][turn][max_reward_idx]
-
-                    turn_history["best_actions"].append(best_action)
-                    turn_history["best_rewards"].append(best_reward)
-                    turn_history["best_observations"].append(best_observation)
-
                     if self.args.verbose:
-                        print(f"- Turn {turn}")
-                        print(f"-- Best Action: {best_action}")
-                        print(f"-- Best Observation: {best_observation}")
-                        print(f"-- Best Reward: {best_reward}")
+                        print(f'------\nQuery {idx + batch_idx}: {query}')    
+
+                    for turn in range(self.args.max_turns):
+                        # ipdb.set_trace()
+                        self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn], turn)
+                        actions = []
+                        try:
+                            while len(actions) == 0:
+                                actions = self.policy.forward(args.num_of_samples[turn])
+                                for action in actions:
+                                    if detect_duplicates(action, 150):
+                                        print(f"[WARNING] Index {idx + batch_idx}: Duplicate detected in action: {action}")
+                                        actions.remove(action)
+                                    
+                        except (ValueError, TypeError) as e:
+                            print(f"[ERROR] Index {idx + batch_idx}: {e}")
+                            # Logging
+                            turn_history["actions"][turn] = ["blocked"]
+                            turn_history["rewards"][turn] = [None]
+                            break
+
+                        turn_history["actions"][turn] = actions
+                        turn_history["rewards"][turn] = []
+                        turn_history["observations"][turn] = []
+
+                        for action in actions:
+                            reward, error_message, success = self.env.step(action)
+                            observation = self.env.format_output(error_message, success, reward)
+                            turn_history["rewards"][turn].append(reward)
+                            turn_history["observations"][turn].append(observation)
                         
-                    if turn_history["best_rewards"][-1] == 1.0:
-                        break
+                        max_reward_idx = turn_history["rewards"][turn].index(max(turn_history["rewards"][turn]))
+                        
+                        best_action = turn_history["actions"][turn][max_reward_idx]
+                        best_reward = turn_history["rewards"][turn][max_reward_idx]
+                        best_observation = turn_history["observations"][turn][max_reward_idx]
+
+                        turn_history["best_actions"].append(best_action)
+                        turn_history["best_rewards"].append(best_reward)
+                        turn_history["best_observations"].append(best_observation)
+
+                        if self.args.verbose:
+                            print(f"- Turn {turn}")
+                            print(f"-- Best Action: {best_action}")
+                            print(f"-- Best Observation: {best_observation}")
+                            print(f"-- Best Reward: {best_reward}")
+                            
+                        if turn_history["best_rewards"][-1] == 1.0:
+                            break
 
                 max_reward = max(turn_history["best_rewards"])
                 answer = self.env.answer

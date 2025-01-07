@@ -157,28 +157,30 @@ class FastChatAgent(Agent):
 class HfChatAgent(Agent):
     """
     An Agent that uses a locally loaded Hugging Face model for inference,
-    avoiding FastChat/controller/worker servers.
+    avoiding FastChat/controller/worker servers, and supports batched inference.
     """
     def __init__(
         self,
         model_name: str = "gpt2",
-        temperature: float = 0,
+        temperature: float = 0.0,
         max_new_tokens: int = 32,
-        top_p: float = 0,
-        prompter=None,             # Pass a callable that formats prompts, if desired
-        device: Optional[str] = None,  # "cuda" or "cpu"
+        top_p: float = 0.0,
+        prompter=None,                   # Pass a callable that formats prompts, if desired
+        device: Optional[str] = None,    # "cuda" or "cpu"
         args: Optional[Dict] = None,
+        batch_size: int = 1,            # <-- Default batch size
         **kwargs
     ) -> None:
         """
-        :param model_name: Hugging Face model name (e.g., "gpt2", "facebook/opt-1.3b", etc.). 
-        :param temperature: Sampling temperature. 
-        :param max_new_tokens: Maximum number of new tokens to generate. 
-        :param top_p: Top-p (nucleus) sampling. 
-        :param prompter: Custom function to build/format the prompt from history. 
-        :param device: "cuda" or "cpu". Defaults to GPU if available. 
-        :param args: Extra generation arguments. 
-        :param kwargs: Passed through to base Agent class if needed. 
+        :param model_name: Hugging Face model name.
+        :param temperature: Sampling temperature.
+        :param max_new_tokens: Maximum number of new tokens to generate.
+        :param top_p: Top-p (nucleus) sampling.
+        :param prompter: Custom function to build/format the prompt from history.
+        :param device: "cuda" or "cpu". Defaults to GPU if available.
+        :param args: Extra generation arguments.
+        :param batch_size: Default batch size for batched inference.
+        :param kwargs: Passed to the base Agent class if needed.
         """
         super().__init__(**kwargs)
         self.model_name = model_name
@@ -187,25 +189,49 @@ class HfChatAgent(Agent):
         self.top_p = top_p
         self.prompter = Prompter.get_prompter(prompter)
         self.args = args or {}
+        self.batch_size = batch_size
 
         # Determine default device if not explicitly given
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            
+
         print(f"Loading model {model_name} on device {device}")
-        # ipdb.set_trace()
 
         # Load tokenizer and model locally
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
-        
+
         # Create a text-generation pipeline
         self.generator = pipeline(
             task="text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            device=0 if device == "cuda" else -1  # pipeline device argument
+            device=1 if device == "cuda" else -1  # pipeline device argument
         )
+
+    def _build_prompt(self, history: List[dict]) -> str:
+        """
+        Internal helper to build a single textual prompt from a single conversation history.
+        """
+        if self.prompter:
+            # If a custom prompter was passed in, use it
+            return self.prompter(history)
+
+        # Otherwise, a simple concatenation approach:
+        prompt = ""
+        for turn in history:
+            role = turn["role"]
+            content = turn["content"]
+            if role == "user":
+                prompt += f"User: {content}\n"
+            elif role == "agent":
+                prompt += f"Assistant: {content}\n"
+            elif role == "system":
+                prompt += f"System: {content}\n"
+            else:
+                prompt += f"{role.capitalize()}: {content}\n"
+        prompt += "Assistant: "
+        return prompt
 
     def inference(self, history: List[dict]) -> str:
         """
@@ -257,7 +283,64 @@ class HfChatAgent(Agent):
             response = generated_text
 
         return response
-    
+
+    def batched_inference(
+        self,
+        histories: Union[List[dict], List[List[dict]]],
+        batch_size: Optional[int] = None
+    ) -> Union[str, List[str]]:
+        """
+        Generates responses given one or multiple conversation histories.
+        
+        :param histories: Either a single conversation (List[dict]) or a list of 
+                          conversations (List[List[dict]]).
+        :param batch_size: If provided, overrides the default batch size.
+        :return: A single string (for single history) or a list of strings (for batched input).
+        """
+        if not histories:
+            return ""
+
+        # Check if we have a single conversation or a batch
+        is_batch = isinstance(histories[0], list)
+        
+        # Convert a single conversation to a batch of size 1
+        if not is_batch:
+            histories = [histories]  # Wrap in list so we can handle uniformly
+
+        # Build prompts for each conversation
+        prompts = [self._build_prompt(h) for h in histories]
+
+        # Use the requested batch size, or fall back to the default
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        # Generate with pipeline (handles batches automatically if given a list of strings)
+        outputs = self.generator(
+            prompts,
+            max_new_tokens=self.max_new_tokens,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            do_sample=(self.temperature > 0),
+            batch_size=batch_size,      # <-- The key for controlling batch size
+            **self.args
+        )
+
+        # 'outputs' will be a list of lists (one sub-list per input prompt).
+        responses = []
+        for i, out in enumerate(outputs):
+            generated_text = out[0]["generated_text"]
+            # Strip out the prompt part if desired
+            if generated_text.startswith(prompts[i]):
+                response = generated_text[len(prompts[i]):].strip()
+            else:
+                response = generated_text
+            responses.append(response)
+
+        # If originally not a batch, return the single string instead of a list
+        if not is_batch:
+            return responses[0]
+        else:
+            return responses
     
 
 class BasePolicy:
@@ -277,14 +360,13 @@ class BasePolicy:
         return dialogue
 
 
-
 class HfChatPolicy(BasePolicy):
-    def __init__(self, dialogue_limit: int = None, model: str = "", response_limit: int = 1000, device: str = "cpu"):
+    def __init__(self, dialogue_limit: int = None, model: str = "", response_limit: int = 1000, device: str = "cpu", batch_size: int = 1):
         super().__init__()
         self.dialogue_limit = dialogue_limit
         self.model = model
         self.response_limit = response_limit
-        self.agent = HfChatAgent(model_name=model, temperature=1.0, device=device, max_new_tokens=response_limit, top_p=1.0, prompter=None, args=None, name = "HfChatAgent")
+        self.agent = HfChatAgent(model_name=model, temperature=1.0, device=device, max_new_tokens=response_limit, top_p=1.0, batch_size=batch_size, prompter=None, args=None, name = "HfChatAgent")
 
     def reset(self, env):
         self.dialogue = self.init_dialogue("agent", env)
@@ -303,7 +385,6 @@ class HfChatPolicy(BasePolicy):
         return actions
         
     
-
 class ChatGPTPolicy(BasePolicy):
     def __init__(self, dialogue_limit: int = None, model: str = "gpt-4-turbo-preview", response_limit: int = 1000):
         super().__init__()
