@@ -27,6 +27,7 @@ parser.add_argument('--verbose', action='store_true', help="print out logs")
 parser.add_argument('--debug', action='store_true', help="debugging mode with less data")
 parser.add_argument('--model_suffix', type=str, default="", help="specify different model output")
 parser.add_argument('--batch_size', type=int, default=1, help="batch size for evaluation")
+parser.add_argument('--without_controller', action='store_true', help="use model without controller")
 args = parser.parse_args()
 print(args)
 
@@ -89,12 +90,12 @@ class ExperimentWrapper():
         if "deepseek-chat" in model:
             self.policy = DeepSeekPolicy(dialogue_limit=args.dialogue_limit, model=model)
             self.role = "assistant"
-        else:
+        elif self.args.without_controller:
             self.policy = HfChatPolicy(dialogue_limit=args.dialogue_limit, model=model, device="cuda", batch_size=args.batch_size)
             self.role = "agent"
-        # else:
-        #     self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
-        #     self.role = "agent"
+        else:
+            self.policy = FastChatPolicy(dialogue_limit=args.dialogue_limit, model=model, controller_address=args.controller_address)
+            self.role = "agent"
         return self.policy, self.role
 
     def construct_policy_dialogue(self, observations, actions, model, turn):
