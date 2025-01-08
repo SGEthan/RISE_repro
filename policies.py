@@ -366,6 +366,7 @@ class HfChatPolicy(BasePolicy):
         self.dialogue_limit = dialogue_limit
         self.model = model
         self.response_limit = response_limit
+        self.dialogues = {}
         self.agent = HfChatAgent(model_name=model, temperature=1.0, device=device, max_new_tokens=response_limit, top_p=1.0, batch_size=batch_size, prompter=None, args=None, name = "HfChatAgent")
 
     def reset(self, env):
@@ -383,6 +384,27 @@ class HfChatPolicy(BasePolicy):
             # if action not in actions:
             actions.append(action)
         return actions
+        
+    def batched_forward(self, num_of_samples, batch_indices, batch_size) -> Union[str, List[str]]:
+        # Only keep {self.dialogue_limit} most recent messages
+        if self.dialogue_limit and len(self.dialogue) - 2 > self.dialogue_limit:
+            self.dialogue = self.dialogue[:2] + self.dialogue[-self.dialogue_limit:]
+        
+        batch_actions = {}
+        action_list = [[] for _ in range(batch_size)]
+        
+        batch_dialoues = []
+        for index in batch_indices:
+            batch_dialoues.append(self.dialogues[index])
+            
+        for i in range(num_of_samples):
+            batch_raw_actions = self.agent.batched_inference(batch_dialoues, batch_size)
+            for j in batch_size:
+                action = batch_raw_actions[j][0] if isinstance(batch_raw_actions[j], list) else batch_raw_actions[j]
+                # if action not in actions:
+                action_list[j].append(action)
+                
+        return action_list
         
     
 class ChatGPTPolicy(BasePolicy):
