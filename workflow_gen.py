@@ -154,6 +154,10 @@ class ExperimentWrapper():
                 
                 init_observation = self.env.reset(idx)
                 query = self.env.query
+                if str(idx) in self.log_data:
+                    if query == self.log_data[str(idx)]["query"]:
+                        print(f"Skipping index {idx} as it has already been processed")
+                        continue
                 if self.args.verbose:
                     print(f'------\nQuery {idx}: {query}')    
 
