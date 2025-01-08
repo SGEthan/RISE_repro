@@ -151,7 +151,7 @@ class ExperimentWrapper():
                     print(f'------\nQuery {idx}: {query}')    
 
                 for turn in range(self.args.max_turns):
-                    self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn])
+                    self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn], turn)
                     actions = []
                     try:
                         while len(actions) == 0:
