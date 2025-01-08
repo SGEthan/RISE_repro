@@ -139,18 +139,26 @@ class ExperimentWrapper():
     def run_expr(self):
         if self.args.debug:
             self.env.data = self.env.data[:10]
-            self.env.data = self.env.data[:5]
         try:
+            self.policies = []
+            self.roles = []
+            for i in range(self.args.max_turns):
+                # initiliaze policies with roles
+                policy, role = self.init_policy(self.args.models[i])
+                self.policies.append(policy)
+                self.roles.append(role)
+                
             for idx in tqdm(range(0,len(self.env.data)), disable=self.args.verbose):
                 observation, reward, valid_action = None, None, None
                 turn_history = {"best_actions": [], "actions": {}, "best_observations": [], "observations": {}, "best_rewards": [], "rewards": {}}
-
+                
                 init_observation = self.env.reset(idx)
                 query = self.env.query
                 if self.args.verbose:
                     print(f'------\nQuery {idx}: {query}')    
 
                 for turn in range(self.args.max_turns):
+                    # ipdb.set_trace()
                     self.construct_policy_dialogue([init_observation] + turn_history["best_observations"], turn_history["best_actions"], args.models[turn], turn)
                     actions = []
                     try:
@@ -160,7 +168,7 @@ class ExperimentWrapper():
                                 if detect_duplicates(action, 150):
                                     print(f"[WARNING] Index {idx}: Duplicate detected in action: {action}")
                                     actions.remove(action)
-
+                                
                     except (ValueError, TypeError) as e:
                         print(f"[ERROR] Index {idx}: {e}")
                         # Logging
@@ -177,9 +185,9 @@ class ExperimentWrapper():
                         observation = self.env.format_output(error_message, success, reward)
                         turn_history["rewards"][turn].append(reward)
                         turn_history["observations"][turn].append(observation)
-
+                    
                     max_reward_idx = turn_history["rewards"][turn].index(max(turn_history["rewards"][turn]))
-
+                    
                     best_action = turn_history["actions"][turn][max_reward_idx]
                     best_reward = turn_history["rewards"][turn][max_reward_idx]
                     best_observation = turn_history["observations"][turn][max_reward_idx]
@@ -193,7 +201,7 @@ class ExperimentWrapper():
                         print(f"-- Best Action: {best_action}")
                         print(f"-- Best Observation: {best_observation}")
                         print(f"-- Best Reward: {best_reward}")
-
+                        
                     if turn_history["best_rewards"][-1] == 1.0:
                         break
 
