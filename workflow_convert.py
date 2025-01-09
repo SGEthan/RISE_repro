@@ -222,6 +222,14 @@ def main():
 
 
     args = parser.parse_args()
+    print(args)
+    
+    output = args.output
+    # get output directory
+    output_dir = os.path.dirname(output)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
     env = args.env
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
@@ -229,6 +237,7 @@ def main():
         logs = json.load(f)
         dataset = []
         for key in logs:
+            print(f"Processing {key}")
             log = logs[key]
             if skip_dialogue(args.only_success, log):
                 continue
