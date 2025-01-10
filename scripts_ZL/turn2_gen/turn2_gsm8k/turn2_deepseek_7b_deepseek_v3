@@ -1,4 +1,4 @@
-[python workflow_gen.py \
+python workflow_gen.py \
     --data_path data/gsm8k/train.jsonl \
     --env gsm8k \
     --log_dir log/gsm8k/ \
@@ -7,4 +7,4 @@
     --controller_address 21004 \
     --model_suffix deepseek_math_7b_instruct_deepseek_v3 \
     --models deepseek-math-7b-instruct deepseek-chat &
-]
+

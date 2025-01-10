@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *nohup*
 *.out
+*.cfg
 # C extensions
 *.so
 
