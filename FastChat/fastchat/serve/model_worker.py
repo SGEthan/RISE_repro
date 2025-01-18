@@ -30,6 +30,7 @@ from fastchat.utils import (
     get_context_length,
     str_to_torch_dtype,
 )
+import ipdb
 
 
 worker_id = str(uuid.uuid4())[:8]
@@ -74,8 +75,6 @@ class ModelWorker(BaseModelWorker):
         )
 
         logger.info(f"Loading the model {self.model_names} on worker {worker_id} ...")
-        # print(device)
-        # print(os.environ["CUDA_VISIBLE_DEVICES"])
         self.model, self.tokenizer = load_model(
             model_path,
             device=device,

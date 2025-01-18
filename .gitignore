@@ -170,3 +170,5 @@ dataset/*
 keys.cfg
 keys_deepseek.cfg
 *_test.py
+model_finetuned/
+wandb/

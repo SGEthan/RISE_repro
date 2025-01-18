@@ -29,6 +29,7 @@ from transformers.trainer_pt_utils import LabelSmoother
 
 from fastchat.conversation import SeparatorStyle
 from fastchat.model.model_adapter import get_conversation_template
+import ipdb
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
@@ -491,9 +492,11 @@ def train():
 
 
     # Start trainner
+    # ipdb.set_trace()
     trainer = CustomTrainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module
     )
+    ipdb.set_trace()
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
         trainer.train(resume_from_checkpoint=True)
     else:
